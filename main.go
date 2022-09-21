@@ -7,11 +7,48 @@ import (
 	"io"
 	"os"
 
+	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
 )
 
+var flags struct {
+	showHelp bool
+}
+
+func init() {
+	pflag.BoolVarP(&flags.showHelp, "help", "h", false, "Show this help text")
+
+	pflag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `Usage: showksec [file]
+
+Base64-decodes secrets in Kubernetes secrets.
+Will read from STDIN by default, but can also read from a given file.
+
+Flags:
+`)
+		pflag.PrintDefaults()
+	}
+}
+
 func main() {
-	docs := readAllDocs(os.Stdin)
+	pflag.Parse()
+	if flags.showHelp {
+		pflag.Usage()
+		return
+	}
+
+	readCloser := os.Stdin
+	if pflag.NArg() > 0 {
+		path := pflag.Arg(0)
+		file, err := os.Open(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "showksec: error opening file: %s\n", err)
+			os.Exit(1)
+		}
+		readCloser = file
+	}
+
+	docs := readAllDocs(readCloser)
 
 	for _, root := range docs {
 		for i := 0; i < len(root.Content); i += 2 {
@@ -54,7 +91,8 @@ func modifyDataNode(key, node *yaml.Node) {
 	}
 }
 
-func readAllDocs(r io.Reader) []yaml.Node {
+func readAllDocs(r io.ReadCloser) []yaml.Node {
+	defer r.Close()
 	dec := yaml.NewDecoder(r)
 	var nodes []yaml.Node
 	for {
