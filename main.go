@@ -46,7 +46,7 @@ func modifyDataNode(key, node *yaml.Node) {
 
 		decoded, err := base64.StdEncoding.DecodeString(value.Value)
 		if err != nil {
-			value.HeadComment = "base64 decode error: " + err.Error()
+			value.LineComment = "base64 decode error: " + err.Error()
 			value.Value = ""
 			continue
 		}
