@@ -1,3 +1,4 @@
+// Package main is the entrypoint to this application.
 package main
 
 import (
@@ -51,17 +52,20 @@ func main() {
 	docs := readAllDocs(readCloser)
 
 	for _, root := range docs {
-		for i := 0; i < len(root.Content); i += 2 {
-			key := root.Content[i]
-			value := root.Content[i+1]
+		var obj Object
+		if err := root.Decode(&obj); err != nil {
+			fmt.Fprintf(os.Stderr, "showksec: error decoding YAML: %s\n", err)
+			continue
+		}
 
-			if key.Kind != yaml.ScalarNode || key.Value != "data" {
-				continue
-			}
-			if value.Kind != yaml.MappingNode {
-				continue
-			}
-			modifyDataNode(key, value)
+		if obj.APIVersion != "v1" {
+			continue
+		}
+		switch obj.Kind {
+		case "List":
+			modifyListObjectNode(&root)
+		case "Secret":
+			modifySecretObjectNode(&root)
 		}
 	}
 
@@ -73,6 +77,46 @@ func main() {
 			fmt.Fprintf(os.Stderr, "showksec: error encoding to stdout: %s\n", err)
 			os.Exit(1)
 		}
+	}
+}
+
+func modifyListObjectNode(node *yaml.Node) {
+	for i := 0; i < len(node.Content); i += 2 {
+		key := node.Content[i]
+		value := node.Content[i+1]
+
+		if key.Kind != yaml.ScalarNode || key.Value != "items" {
+			continue
+		}
+		if value.Kind != yaml.SequenceNode {
+			continue
+		}
+		for _, item := range value.Content {
+			var obj Object
+			if err := item.Decode(&obj); err != nil {
+				fmt.Fprintf(os.Stderr, "showksec: error decoding YAML: %s\n", err)
+				continue
+			}
+			if obj.APIVersion != "v1" || obj.Kind != "Secret" {
+				continue
+			}
+			modifySecretObjectNode(item)
+		}
+	}
+}
+
+func modifySecretObjectNode(node *yaml.Node) {
+	for i := 0; i < len(node.Content); i += 2 {
+		key := node.Content[i]
+		value := node.Content[i+1]
+
+		if key.Kind != yaml.ScalarNode || key.Value != "data" {
+			continue
+		}
+		if value.Kind != yaml.MappingNode {
+			continue
+		}
+		modifyDataNode(key, value)
 	}
 }
 
@@ -106,4 +150,10 @@ func readAllDocs(r io.ReadCloser) []yaml.Node {
 		}
 		nodes = append(nodes, *node.Content[0])
 	}
+}
+
+// Object is a Kubernetes object
+type Object struct {
+	Kind       string `yaml:"kind"`
+	APIVersion string `yaml:"apiVersion"`
 }
