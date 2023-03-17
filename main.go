@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"unicode/utf8"
 
 	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
@@ -123,12 +124,18 @@ func modifySecretObjectNode(node *yaml.Node) {
 func modifyDataNode(key, node *yaml.Node) {
 	key.Value = "stringData"
 	for i := 0; i < len(node.Content); i += 2 {
+		key := node.Content[i]
 		value := node.Content[i+1]
 
 		decoded, err := base64.StdEncoding.DecodeString(value.Value)
 		if err != nil {
-			value.LineComment = "base64 decode error: " + err.Error()
+			key.HeadComment = fmt.Sprintf("key %q: base64 decode error: %s", key.Value, err)
 			value.Value = ""
+			continue
+		}
+		if !utf8.Valid(decoded) {
+			key.HeadComment = fmt.Sprintf("key %q: value contains invalid UTF-8 characters", key.Value)
+			value.Tag = "!!binary"
 			continue
 		}
 		value.Value = string(decoded)
