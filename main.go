@@ -59,13 +59,15 @@ func main() {
 			continue
 		}
 
-		if obj.APIVersion != "v1" {
+		if obj.APIVersion != "v1" && obj.APIVersion != "clustersecret.io/v1" {
 			continue
 		}
 		switch obj.Kind {
 		case "List":
 			modifyListObjectNode(&root)
 		case "Secret":
+			modifySecretObjectNode(&root)
+		case "ClusterSecret":
 			modifySecretObjectNode(&root)
 		}
 	}
@@ -98,7 +100,8 @@ func modifyListObjectNode(node *yaml.Node) {
 				fmt.Fprintf(os.Stderr, "showksec: error decoding YAML: %s\n", err)
 				continue
 			}
-			if obj.APIVersion != "v1" || obj.Kind != "Secret" {
+			if (obj.APIVersion != "v1" || obj.Kind != "Secret") &&
+			 (obj.APIVersion != "clustersecret.io/v1" || obj.Kind != "ClusterSecret") {
 				continue
 			}
 			modifySecretObjectNode(item)
