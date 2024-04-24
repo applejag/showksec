@@ -10,7 +10,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/spf13/pflag"
+	"github.com/vmware-labs/yaml-jsonpath/pkg/yamlpath"
 	"gopkg.in/yaml.v3"
+)
+
+var (
+	dataKeyPath = mustNewPath(`.data~`)
+	dataMapPath = mustNewPath(`.data`)
+	clusterSecretV2Path = mustNewPath(`.spec.template`)
 )
 
 var flags struct {
@@ -62,13 +69,15 @@ func main() {
 		if obj.APIVersion != "v1" && obj.APIVersion != "clustersecret.io/v1" && obj.APIVersion != "clustersecret.io/v2" {
 			continue
 		}
-		switch obj.Kind {
-		case "List":
+		switch {
+		case obj.Kind == "List":
 			modifyListObjectNode(&root)
-		case "Secret":
+		case obj.APIVersion == "v1" && obj.Kind == "Secret":
 			modifySecretObjectNode(&root)
-		case "ClusterSecret":
+		case obj.APIVersion != "clustersecret.io/v1" && obj.Kind == "ClusterSecret":
 			modifySecretObjectNode(&root)
+		case obj.APIVersion != "clustersecret.io/v2" && obj.Kind == "ClusterSecret":
+			modifyClusterSecretV2ObjectNode(&root)
 		}
 	}
 
@@ -100,28 +109,35 @@ func modifyListObjectNode(node *yaml.Node) {
 				fmt.Fprintf(os.Stderr, "showksec: error decoding YAML: %s\n", err)
 				continue
 			}
-			if (obj.APIVersion != "v1" || obj.Kind != "Secret") &&
-				(obj.APIVersion != "clustersecret.io/v1" || obj.Kind != "ClusterSecret") {
-				continue
+			switch {
+			case obj.APIVersion == "v1" && obj.Kind == "Secret",
+				obj.APIVersion == "clustersecret.io/v1" && obj.Kind == "ClusterSecret":
+				modifySecretObjectNode(item)
+			case obj.APIVersion == "clustersecret.io/v2" && obj.Kind == "ClusterSecret":
+				modifyClusterSecretV2ObjectNode(item)
 			}
-			modifySecretObjectNode(item)
 		}
 	}
 }
 
 func modifySecretObjectNode(node *yaml.Node) {
-	for i := 0; i < len(node.Content); i += 2 {
-		key := node.Content[i]
-		value := node.Content[i+1]
-
-		if key.Kind != yaml.ScalarNode || key.Value != "data" {
-			continue
-		}
-		if value.Kind != yaml.MappingNode {
-			continue
-		}
-		modifyDataNode(key, value)
+	keyNodes, err := dataKeyPath.Find(node)
+	if err != nil || len(keyNodes) == 0 {
+		return
 	}
+	valueNodes, err := dataMapPath.Find(node)
+	if err != nil || len(valueNodes) == 0 {
+		return
+	}
+	modifyDataNode(keyNodes[0], valueNodes[0])
+}
+
+func modifyClusterSecretV2ObjectNode(node *yaml.Node) {
+	templateNodes, err := clusterSecretV2Path.Find(node)
+	if err != nil || len(templateNodes) == 0 {
+		return
+	}
+	modifySecretObjectNode(templateNodes[0])
 }
 
 func modifyDataNode(key, node *yaml.Node) {
@@ -166,4 +182,12 @@ func readAllDocs(r io.ReadCloser) []yaml.Node {
 type Object struct {
 	Kind       string `yaml:"kind"`
 	APIVersion string `yaml:"apiVersion"`
+}
+
+func mustNewPath(path string) *yamlpath.Path {
+	p, err := yamlpath.NewPath(path)
+	if err != nil {
+		panic(err)
+	}
+	return p
 }
