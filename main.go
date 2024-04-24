@@ -59,7 +59,7 @@ func main() {
 			continue
 		}
 
-		if obj.APIVersion != "v1" && obj.APIVersion != "clustersecret.io/v1" {
+		if obj.APIVersion != "v1" && obj.APIVersion != "clustersecret.io/v1" && obj.APIVersion != "clustersecret.io/v2" {
 			continue
 		}
 		switch obj.Kind {
@@ -101,7 +101,7 @@ func modifyListObjectNode(node *yaml.Node) {
 				continue
 			}
 			if (obj.APIVersion != "v1" || obj.Kind != "Secret") &&
-			 (obj.APIVersion != "clustersecret.io/v1" || obj.Kind != "ClusterSecret") {
+				(obj.APIVersion != "clustersecret.io/v1" || obj.Kind != "ClusterSecret") {
 				continue
 			}
 			modifySecretObjectNode(item)
