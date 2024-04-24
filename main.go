@@ -74,9 +74,9 @@ func main() {
 			modifyListObjectNode(&root)
 		case obj.APIVersion == "v1" && obj.Kind == "Secret":
 			modifySecretObjectNode(&root)
-		case obj.APIVersion != "clustersecret.io/v1" && obj.Kind == "ClusterSecret":
+		case obj.APIVersion == "clustersecret.io/v1" && obj.Kind == "ClusterSecret":
 			modifySecretObjectNode(&root)
-		case obj.APIVersion != "clustersecret.io/v2" && obj.Kind == "ClusterSecret":
+		case obj.APIVersion == "clustersecret.io/v2" && obj.Kind == "ClusterSecret":
 			modifyClusterSecretV2ObjectNode(&root)
 		}
 	}
